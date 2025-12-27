@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState, useEffect } from "react";
 import MarkdownMessage from "./MarkdownMessage";
 
 type Message = {
@@ -9,15 +9,27 @@ type Message = {
 };
 
 export default function ChatUI() {
-  const sessionId = useRef(crypto.randomUUID()).current;
-  
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Runs only in browser
+    let storedSessionId = localStorage.getItem("chat_session_id");
+
+    if (!storedSessionId) {
+      storedSessionId = crypto.randomUUID();
+      localStorage.setItem("chat_session_id", storedSessionId);
+    }
+
+    setSessionId(storedSessionId);
+  }, []);
+
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: "Hello! Ask me something." },
   ]);
   const [input, setInput] = useState("");
 
   async function sendMessage() {
-    if (!input.trim()) return;
+    if (!input.trim() || !sessionId) return;
 
     const userMessage = input;
     setInput("");
@@ -55,6 +67,8 @@ export default function ChatUI() {
   }
 
   async function clearChat() {
+    if (!sessionId) return;
+    
     await fetch("/api/clear-chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -65,6 +79,16 @@ export default function ChatUI() {
 
     setMessages([
       { role: "assistant", content: "Chat cleared. How can I help?" },
+    ]);
+  }
+
+  function newChat() {
+    const newSessionId = crypto.randomUUID();
+    localStorage.setItem("chat_session_id", newSessionId);
+    setSessionId(newSessionId);
+
+    setMessages([
+      { role: "assistant", content: "New chat started. How can I help?" },
     ]);
   }
 
@@ -79,6 +103,12 @@ export default function ChatUI() {
             className="text-sm text-red-600 hover:underline"
           >
             Clear chat
+          </button>
+          <button
+            onClick={newChat}
+            className="text-sm text-red-600 hover:underline"
+          >
+            New chat
           </button>
         </div>
 
