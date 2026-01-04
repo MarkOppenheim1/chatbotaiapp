@@ -24,34 +24,39 @@ This project demonstrates how modern AI applications are architected in real-wor
 
 ## 🏗 Architecture Overview
 
+```
 Browser (Next.js + Tailwind)
-↓
+   ↓
 Next.js API Routes
-↓
+   ↓
 LangServe (FastAPI)
-↓
+   ↓
 LangChain / LangGraph-ready
-↓
+   ↓
 LLM (Gemini or OpenAI)
-↓
+   ↓
 Redis (chat memory)
+```
 
 ---
 
 ## 📁 Repository Structure
+
+```
 .
-├── frontend/ # Next.js app (UI, auth, API proxy)
-│ ├── app/
-│ ├── components/
-│ └── ...
+├── frontend/              # Next.js app (UI, auth, API proxy)
+│   ├── app/
+│   ├── components/
+│   └── ...
 │
-├── backend/ # LangServe + LangChain backend
-│ ├── server.py
-│ ├── chain.py
-│ └── ...
+├── backend/               # LangServe + LangChain backend
+│   ├── server.py
+│   ├── chain.py
+│   └── ...
 │
 ├── .gitignore
 └── README.md
+```
 
 ---
 
@@ -69,11 +74,16 @@ Redis (chat memory)
 
 ## 🔧 Backend Setup (LangServe)
 
+```bash
 cd backend
 python -m venv venv
 venv\Scripts\activate   # Windows
 pip install -r requirements.txt
+```
 
+Set environment variables:
+
+```env
 # LLM
 OPENAI_API_KEY=...
 # or
@@ -86,99 +96,124 @@ REDIS_URL=rediss://default:password@host:6379
 LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=...
 LANGCHAIN_PROJECT=chat-app
+```
+
 Start the backend:
 
+```bash
 uvicorn server:app --reload --port 8001
-Open:
+```
 
+Open:
+```
 http://127.0.0.1:8001/docs
+```
 
 ---
 
 ## 🌐 Frontend Setup (Next.js)
 
+```bash
 cd frontend
 npm install
-Create .env.local:
+```
 
+Create `.env.local`:
+
+```env
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=some-random-secret
 
 GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
-GitHub OAuth callback URL must be:
+```
 
-http://localhost:3000/api/auth/callback/github
+> GitHub OAuth callback URL must be:
+> ```
+> http://localhost:3000/api/auth/callback/github
+> ```
+
 Start the frontend:
 
+```bash
 npm run dev
+```
+
 Open:
-
+```
 http://localhost:3000
-🧠 Chat Memory Design
-Chat memory is stored in Redis
+```
 
-Memory is keyed by:
+---
 
-user:<github_user_id>
-Memory:
+## 🧠 Chat Memory Design
 
-persists across refreshes
+- Chat memory is stored in **Redis**
+- Memory is keyed by:
+  ```
+  user:<github_user_id>
+  ```
+- Memory:
+  - persists across refreshes
+  - works across devices
+  - is cleared via **Clear Chat**
+- No browser-based session IDs are used
 
-works across devices
+---
 
-is cleared via Clear Chat
+## 🧹 Clear Chat
 
-No browser-based session IDs are used
+The **Clear Chat** button:
+- deletes Redis history for the current user
+- resets the UI state
+- does **not** affect other users
 
-🧹 Clear Chat
-The Clear Chat button:
+---
 
-deletes Redis history for the current user
+## 🔍 Observability (LangSmith)
 
-resets the UI state
-
-does not affect other users
-
-🔍 Observability (LangSmith)
 LangSmith can be enabled via environment variables only (no code changes required):
 
+```env
 LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=...
 LANGCHAIN_PROJECT=chat-app
+```
+
 View traces at:
 https://smith.langchain.com
 
-🔒 Security Notes
-API keys are never exposed to the browser
+---
 
-Authentication handled via OAuth (GitHub)
+## 🔒 Security Notes
 
-Redis access is server-side only
+- API keys are never exposed to the browser
+- Authentication handled via OAuth (GitHub)
+- Redis access is server-side only
+- `.env` files are excluded from version control
 
-.env files are excluded from version control
+---
 
-🧩 Future Extensions
-Multiple conversations per user
+## 🧩 Future Extensions
 
-LangGraph agents & tools
+- Multiple conversations per user
+- LangGraph agents & tools
+- Rate limiting / usage caps
+- Deployment (Vercel + Fly.io / Render)
+- Guest mode support
 
-Rate limiting / usage caps
+---
 
-Deployment (Vercel + Fly.io / Render)
+## 📜 License
 
-Guest mode support
-
-📜 License
 MIT (or your preferred license)
 
-🙌 Acknowledgements
-Next.js
+---
 
-LangChain & LangServe
+## 🙌 Acknowledgements
 
-Auth.js / NextAuth
-
-Redis / Upstash
-
-OpenAI & Google Gemini
+- Next.js
+- LangChain & LangServe
+- Auth.js / NextAuth
+- Redis / Upstash
+- OpenAI & Google Gemini
