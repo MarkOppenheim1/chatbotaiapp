@@ -89,23 +89,16 @@ LANGCHAIN_API_KEY=...
 LANGCHAIN_PROJECT=chat-app
 Start the backend:
 
-bash
-Copy code
 uvicorn server:app --reload --port 8001
 Open:
 
-arduino
-Copy code
 http://127.0.0.1:8001/docs
 🌐 Frontend Setup (Next.js)
-bash
-Copy code
+
 cd frontend
 npm install
 Create .env.local:
 
-env
-Copy code
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=some-random-secret
 
@@ -113,26 +106,18 @@ GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
 GitHub OAuth callback URL must be:
 
-bash
-Copy code
 http://localhost:3000/api/auth/callback/github
 Start the frontend:
 
-bash
-Copy code
 npm run dev
 Open:
 
-arduino
-Copy code
 http://localhost:3000
 🧠 Chat Memory Design
 Chat memory is stored in Redis
 
 Memory is keyed by:
 
-makefile
-Copy code
 user:<github_user_id>
 Memory:
 
@@ -156,8 +141,6 @@ does not affect other users
 🔍 Observability (LangSmith)
 LangSmith can be enabled via environment variables only (no code changes required):
 
-env
-Copy code
 LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=...
 LANGCHAIN_PROJECT=chat-app
