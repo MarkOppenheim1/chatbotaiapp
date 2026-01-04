@@ -15,11 +15,11 @@ llmOpenAI = ChatOpenAI(
 )
 
 llmGemini = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-lite",
+    model="gemini-2.0-flash",#"gemini-2.5-flash-lite","gemini-2.5-flash"
     temperature=0.7
 )
 
-llm = llmGemini  # Switch between llmOpenAI and llmGemini here
+llm = llmOpenAI  # Switch between llmOpenAI and llmGemini here
 
 
 prompt = ChatPromptTemplate.from_messages([

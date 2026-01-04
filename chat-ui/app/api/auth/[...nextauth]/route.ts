@@ -9,9 +9,14 @@ export const authOptions = {
     }),
   ],
   callbacks: {
+    async jwt({ token }) {
+      if (token.sub) token.userId = token.sub;
+      return token;
+    },
     async session({ session, token }) {
-      // Attach user id to session
-      session.user.id = token.sub;
+      if (session.user && token.userId) {
+        session.user.id = token.userId;
+      }
       return session;
     },
   },

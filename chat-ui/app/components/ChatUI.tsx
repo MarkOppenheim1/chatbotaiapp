@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import MarkdownMessage from "./MarkdownMessage";
+import { signIn, signOut, useSession } from "next-auth/react";
 
 type Message = {
   role: "user" | "assistant";
@@ -9,28 +10,42 @@ type Message = {
 };
 
 export default function ChatUI() {
-  const [sessionId, setSessionId] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Runs only in browser
-    let storedSessionId = localStorage.getItem("chat_session_id");
-
-    if (!storedSessionId) {
-      storedSessionId = crypto.randomUUID();
-      localStorage.setItem("chat_session_id", storedSessionId);
-    }
-
-    setSessionId(storedSessionId);
-  }, []);
+  const { data: session, status } = useSession();
+  const userId = session?.user?.id;
+  const sessionKey = userId ? `user:${userId}` : null; 
 
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: "Hello! Ask me something." },
   ]);
   const [input, setInput] = useState("");
 
-  async function sendMessage() {
-    if (!input.trim() || !sessionId) return;
+  if (status === "loading") {
+    return <div>Loading session...</div>;
+  }
 
+  if (!sessionKey) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <button
+          onClick={() => signIn("github")}
+          className="rounded bg-black px-4 py-2 text-white"
+        >
+          Sign in with GitHub
+        </button>
+      </div>
+    );
+  }
+
+
+  console.log("Auth session:", session);
+  
+
+
+  
+
+  async function sendMessage() {
+    if (!input.trim()) return;
+    
     const userMessage = input;
     setInput("");
 
@@ -40,12 +55,16 @@ export default function ChatUI() {
         { role: "assistant", content: "" },
     ]);
 
+    if (!userId) {
+      console.log("No user ID");
+      return;
+    }
     const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
             input: userMessage,
-            session_id: sessionId, 
+            session_id: sessionKey, 
         }),
     });
 
@@ -67,28 +86,18 @@ export default function ChatUI() {
   }
 
   async function clearChat() {
-    if (!sessionId) return;
+    if (!sessionKey) return;
     
     await fetch("/api/clear-chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        session_id: sessionId,
+        session_id: sessionKey,
       }),
     });
 
     setMessages([
       { role: "assistant", content: "Chat cleared. How can I help?" },
-    ]);
-  }
-
-  function newChat() {
-    const newSessionId = crypto.randomUUID();
-    localStorage.setItem("chat_session_id", newSessionId);
-    setSessionId(newSessionId);
-
-    setMessages([
-      { role: "assistant", content: "New chat started. How can I help?" },
     ]);
   }
 
@@ -103,12 +112,6 @@ export default function ChatUI() {
             className="text-sm text-red-600 hover:underline"
           >
             Clear chat
-          </button>
-          <button
-            onClick={newChat}
-            className="text-sm text-red-600 hover:underline"
-          >
-            New chat
           </button>
         </div>
 
