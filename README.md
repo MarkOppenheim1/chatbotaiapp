@@ -69,7 +69,6 @@ Redis (chat memory)
 
 ## 🔧 Backend Setup (LangServe)
 
-```bash
 cd backend
 python -m venv venv
 venv\Scripts\activate   # Windows
