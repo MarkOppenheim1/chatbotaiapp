@@ -92,7 +92,10 @@ uvicorn server:app --reload --port 8001
 Open:
 
 http://127.0.0.1:8001/docs
-🌐 Frontend Setup (Next.js)
+
+---
+
+## 🌐 Frontend Setup (Next.js)
 
 cd frontend
 npm install
