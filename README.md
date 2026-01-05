@@ -44,7 +44,7 @@ Redis (chat memory)
 
 ```
 .
-├── frontend/              # Next.js app (UI, auth, API proxy)
+├── chat-ui/              # Next.js app (UI, auth, API proxy)
 │   ├── app/
 │   ├── components/
 │   └── ...
@@ -111,10 +111,10 @@ http://127.0.0.1:8001/docs
 
 ---
 
-## 🌐 Frontend Setup (Next.js)
+## 🌐 Chat-UI Setup (Next.js)
 
 ```bash
-cd frontend
+cd chat-ui
 npm install
 ```
 
