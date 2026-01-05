@@ -62,7 +62,7 @@ export async function POST(req: Request) {
             try {
               const json = JSON.parse(line.replace("data: ", ""));
               if (json.content) {
-                console.log("Streaming content:", json.content);
+                
                 //#controller.enqueue(json.content);
                 controller.enqueue(normalizeGeminiContent(json.content));
               }

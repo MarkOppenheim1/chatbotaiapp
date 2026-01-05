@@ -13,6 +13,7 @@ export default function ChatUI() {
   const { data: session, status } = useSession();
   const userId = session?.user?.id;
   const sessionKey = userId ? `user:${userId}` : null; 
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: "Hello! Ask me something." },
@@ -36,16 +37,10 @@ export default function ChatUI() {
     );
   }
 
-
-  console.log("Auth session:", session);
-  
-
-
-  
-
   async function sendMessage() {
-    if (!input.trim()) return;
+    if (!input.trim() || isStreaming || !sessionKey) return;
     
+    setIsStreaming(true);
     const userMessage = input;
     setInput("");
 
@@ -55,36 +50,36 @@ export default function ChatUI() {
         { role: "assistant", content: "" },
     ]);
 
-    if (!userId) {
-      console.log("No user ID");
-      return;
-    }
-    const res = await fetch("/api/chat", {
+    try {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-            input: userMessage,
-            session_id: sessionKey, 
+        body: JSON.stringify({
+          input: userMessage,
+          session_id: sessionKey,
         }),
-    });
+      });
 
-    const reader = res.body!.getReader();
-    const decoder = new TextDecoder();
-    let text = "";
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let text = "";
 
-    while (true) {
+      while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         text += decoder.decode(value);
         setMessages((msgs) => {
-            const updated = [...msgs];
-            updated[updated.length - 1].content = text;
-            return updated;
+          const updated = [...msgs];
+          updated[updated.length - 1].content = text;
+          return updated;
         });
+      }
+    } finally {
+      setIsStreaming(false);
     }
   }
-
+  
   async function clearChat() {
     if (!sessionKey) return;
     
@@ -134,19 +129,26 @@ export default function ChatUI() {
               </div>
             </div>
           ))}
+          {isStreaming && (
+            <div className="text-sm text-gray-500 italic">
+              Assistant is typing…
+            </div>
+          )}
         </div>
 
         <div className="border-t p-3 flex gap-2">
           <input
+            disabled={isStreaming}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             placeholder="Type a message…"
-            className="flex-1 rounded border px-3 py-2 focus:outline-none focus:ring"
+            className="flex-1 rounded border px-3 py-2 focus:outline-none focus:ring disabled:bg-gray-100"
           />
           <button
+            disabled={isStreaming}
             onClick={sendMessage}
-            className="rounded bg-blue-600 px-4 py-2 text-white"
+            className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
           >
             Send
           </button>
