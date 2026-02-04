@@ -8,3 +8,6 @@ sse_starlette
 langchain_google_genai
 redis 
 langchain-community
+chromadb
+langchain-chroma
+pypdf
