@@ -41,7 +41,7 @@ vectordb = Chroma(
     embedding_function=embeddings,
 )
 
-retriever = vectordb.as_retriever(search_kwargs={"k": 4})
+retriever = vectordb.as_retriever(search_kwargs={"k": 2})
 
 # -------------------------------------------------
 # Helpers
@@ -176,8 +176,14 @@ def sources_only(inputs: dict) -> dict:
         snippet = d.page_content.strip().replace("\n", " ")
         if len(snippet) > 220:
             snippet = snippet[:220] + "…"
+        src = meta.get("source")
+        if src:
+            try:
+                src = str(Path(src).relative_to(Path(__file__).parent / "data"))
+            except Exception:
+                pass
         sources.append({
-            "source": meta.get("source"),
+            "source": src,
             "page": meta.get("page") + 1 if isinstance(meta.get("page"), int) else None,
             "snippet": snippet,
         })

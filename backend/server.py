@@ -34,3 +34,26 @@ def clear_chat(req: ClearChatRequest):
     )
     history.clear()
     return {"status": "cleared"}
+
+from fastapi import HTTPException
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+DATA_DIR = Path(__file__).parent / "data"
+
+@app.get("/files")
+def get_file(path: str):
+    """
+    Serve files from backend/data safely.
+    Example: /files?path=braveheart.txt
+    """
+    file_path = (DATA_DIR / path).resolve()
+
+    # Prevent path traversal
+    if not str(file_path).startswith(str(DATA_DIR.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(file_path)
