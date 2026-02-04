@@ -1,18 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import MarkdownMessage from "./MarkdownMessage";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
+
+type Source = {
+  source: string;
+  page: number | null;
+  snippet: string;
+};
 
 type Message = {
   role: "user" | "assistant";
   content: string;
+  sources?: Source[];
 };
 
 export default function ChatUI() {
   const { data: session, status } = useSession();
   const userId = session?.user?.id;
-  const sessionKey = userId ? `user:${userId}` : null; 
+  const sessionKey = userId ? `user:${userId}` : null;
   const [isStreaming, setIsStreaming] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([
@@ -37,17 +44,36 @@ export default function ChatUI() {
     );
   }
 
+  async function fetchSources(userMessage: string, session_id: string) {
+    try {
+      const res = await fetch("/api/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: userMessage,
+          session_id,
+        }),
+      });
+
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data?.sources ?? []) as Source[];
+    } catch {
+      return [];
+    }
+  }
+
   async function sendMessage() {
     if (!input.trim() || isStreaming || !sessionKey) return;
-    
+
     setIsStreaming(true);
     const userMessage = input;
     setInput("");
 
     setMessages((msgs) => [
-        ...msgs,
-        { role: "user", content: userMessage },
-        { role: "assistant", content: "" },
+      ...msgs,
+      { role: "user", content: userMessage },
+      { role: "assistant", content: "", sources: [] },
     ]);
 
     try {
@@ -71,18 +97,37 @@ export default function ChatUI() {
         text += decoder.decode(value);
         setMessages((msgs) => {
           const updated = [...msgs];
-          updated[updated.length - 1].content = text;
+          // last message is the assistant placeholder we appended
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: text,
+          };
           return updated;
         });
       }
+
+      // ✅ After streaming is done, fetch sources and attach to the last assistant message
+      const sources = await fetchSources(userMessage, sessionKey);
+
+      setMessages((msgs) => {
+        const updated = [...msgs];
+        // attach to the last assistant message
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].role === "assistant") {
+            updated[i] = { ...updated[i], sources };
+            break;
+          }
+        }
+        return updated;
+      });
     } finally {
       setIsStreaming(false);
     }
   }
-  
+
   async function clearChat() {
     if (!sessionKey) return;
-    
+
     await fetch("/api/clear-chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -91,15 +136,12 @@ export default function ChatUI() {
       }),
     });
 
-    setMessages([
-      { role: "assistant", content: "Chat cleared. How can I help?" },
-    ]);
+    setMessages([{ role: "assistant", content: "Chat cleared. How can I help?" }]);
   }
 
   return (
     <div className="flex h-screen justify-center bg-gray-100">
       <div className="flex w-full max-w-2xl flex-col bg-white shadow-lg">
-
         <div className="border-b px-4 py-3 flex items-center justify-between">
           <span className="font-semibold">💬 Chatbot</span>
           <button
@@ -125,10 +167,37 @@ export default function ChatUI() {
                     : "bg-green-200 text-gray-900"
                 }`}
               >
-                {msg.role === "assistant" ? (<MarkdownMessage content={msg.content} />) : (msg.content)}
+                {msg.role === "assistant" ? (
+                  <>
+                    <MarkdownMessage content={msg.content} />
+
+                    {/* ✅ Sources */}
+                    {!!msg.sources?.length && (
+                      <div className="mt-3 border-t border-black/10 pt-2 text-xs text-gray-700">
+                        <div className="font-semibold mb-1">Sources</div>
+                        <ul className="space-y-2">
+                          {msg.sources.map((s, idx) => (
+                            <li key={idx}>
+                              <div className="font-medium">
+                                [{idx + 1}] {s.source}
+                                {s.page ? ` (p. ${s.page})` : ""}
+                              </div>
+                              {!!s.snippet && (
+                                <div className="opacity-80">{s.snippet}</div>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  msg.content
+                )}
               </div>
             </div>
           ))}
+
           {isStreaming && (
             <div className="text-sm text-gray-500 italic">
               Assistant is typing…
@@ -153,9 +222,7 @@ export default function ChatUI() {
             Send
           </button>
         </div>
-
       </div>
     </div>
   );
 }
-

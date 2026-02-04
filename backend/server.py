@@ -4,7 +4,7 @@ load_dotenv()
 from fastapi import FastAPI
 from pydantic import BaseModel
 from langserve import add_routes
-from chain import chain
+from chain import chain, sources_chain
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 import os
 
@@ -15,6 +15,8 @@ add_routes(
     chain,
     path="/chat"
 )
+
+add_routes(app, sources_chain, path="/sources")
 
 # -----------------------------
 # Clear chat memory endpoint
