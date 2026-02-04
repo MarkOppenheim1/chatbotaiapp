@@ -179,7 +179,15 @@ export default function ChatUI() {
                           {msg.sources.map((s, idx) => (
                             <li key={idx}>
                               <div className="font-medium">
-                                [{idx + 1}] {s.source}
+                                [{idx + 1}]{" "}
+                                <a
+                                  href={`http://localhost:8001/files?path=${encodeURIComponent(s.source)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 underline hover:text-blue-800"
+                                >
+                                  {s.source}
+                                </a>
                                 {s.page ? ` (p. ${s.page})` : ""}
                               </div>
                               {!!s.snippet && (
