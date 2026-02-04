@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import MarkdownMessage from "./MarkdownMessage";
-import { signIn, useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
 
 type Source = {
   source: string;
@@ -39,6 +39,12 @@ export default function ChatUI() {
           className="rounded bg-black px-4 py-2 text-white"
         >
           Sign in with GitHub
+        </button>
+        <button
+          onClick={() => signIn("google")}
+          className="rounded bg-white px-4 py-2 text-black border"
+        >
+          Sign in with Google
         </button>
       </div>
     );
@@ -144,12 +150,26 @@ export default function ChatUI() {
       <div className="flex w-full max-w-2xl flex-col bg-white shadow-lg">
         <div className="border-b px-4 py-3 flex items-center justify-between">
           <span className="font-semibold">💬 Chatbot</span>
-          <button
-            onClick={clearChat}
-            className="text-sm text-red-600 hover:underline"
-          >
-            Clear chat
-          </button>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={clearChat}
+              className="text-sm text-red-600 hover:underline"
+            >
+              Clear chat
+            </button>
+
+            <button
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="text-sm text-gray-700 hover:underline"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+
+        <div className="px-4 py-1 text-xs text-gray-500">
+          Signed in as {session?.user?.email ?? session?.user?.name}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -204,6 +224,7 @@ export default function ChatUI() {
                 )}
               </div>
             </div>
+            
           ))}
 
           {isStreaming && (
