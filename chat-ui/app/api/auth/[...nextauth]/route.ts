@@ -14,17 +14,30 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token }) {
+    async jwt({ token, account }) {
+      // stable user id
       if (token.sub) token.userId = token.sub;
+
+      // ✅ store provider ("github" | "google") at sign-in time
+      if (account?.provider) {
+        token.provider = account.provider;
+      }
+
       return token;
     },
+
     async session({ session, token }) {
-      if (session.user && token.userId) {
-        session.user.id = token.userId;
+      if (session.user && (token as any).userId) {
+        session.user.id = (token as any).userId;
       }
+
+      // ✅ expose provider to the client
+      (session.user as any).provider = (token as any).provider;
+
       return session;
     },
   },
+
 };
 
 const handler = NextAuth(authOptions);

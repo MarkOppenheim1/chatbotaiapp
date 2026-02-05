@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import MarkdownMessage from "./MarkdownMessage";
 import { signIn, signOut, useSession } from "next-auth/react";
 
@@ -194,6 +194,91 @@ export default function ChatUI() {
     setMessages([{ role: "assistant", content: "Chat cleared. How can I help?" }]);
   }
 
+  function ProfileMenu({
+    user,
+    onLogout,
+  }: {
+    user: { name?: string; email?: string; image?: string; provider?: string };
+    onLogout: () => void;
+  }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement | null>(null);
+
+    // Close when clicking outside
+    useEffect(() => {
+      function onDocClick(e: MouseEvent) {
+        if (!ref.current) return;
+        if (!ref.current.contains(e.target as Node)) setOpen(false);
+      }
+      document.addEventListener("mousedown", onDocClick);
+      return () => document.removeEventListener("mousedown", onDocClick);
+    }, []);
+
+    const providerLabel =
+      user.provider === "google"
+        ? "Google"
+        : user.provider === "github"
+        ? "GitHub"
+        : "Account";
+
+    return (
+      <div className="relative" ref={ref}>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-2 py-1 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          aria-haspopup="menu"
+          aria-expanded={open}
+        >
+          {user.image ? (
+            <img
+              src={user.image}
+              alt="profile"
+              className="h-7 w-7 rounded-full"
+            />
+          ) : (
+            <div className="h-7 w-7 rounded-full bg-gray-200" />
+          )}
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            className="h-4 w-4 text-gray-500"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.24 4.5a.75.75 0 0 1-1.08 0l-4.24-4.5a.75.75 0 0 1 .02-1.06z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+
+        {open && (
+          <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+            <div className="px-4 py-3">
+              <div className="text-sm font-semibold text-gray-900">
+                {user.name ?? "Signed in"}
+              </div>
+              <div className="text-xs text-gray-600">{user.email ?? ""}</div>
+              <div className="mt-1 text-[11px] text-gray-500">
+                Signed in with {providerLabel}
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100" />
+
+            <button
+              onClick={onLogout}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+              role="menuitem"
+            >
+              Logout
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen justify-center bg-gray-100">
       <div className="flex w-full max-w-2xl flex-col bg-white shadow-lg">
@@ -208,29 +293,17 @@ export default function ChatUI() {
               Clear chat
             </button>
 
-            <button
-              onClick={() => signOut({ callbackUrl: "/" })}
-              className="text-sm text-gray-700 hover:underline"
-            >
-              Logout
-            </button>
+            <ProfileMenu
+              user={{
+                name: session?.user?.name ?? undefined,
+                email: session?.user?.email ?? undefined,
+                image: session?.user?.image ?? undefined,
+                provider: (session?.user as any)?.provider ?? "unknown",
+              }}
+              onLogout={() => signOut({ callbackUrl: "/" })}
+            />
           </div>
         </div>
-
-        {session?.user && (
-          <div className="px-4 py-2 text-sm text-gray-700 flex items-center gap-2">
-            {session.user.image && (
-              <img
-                src={session.user.image}
-                alt="avatar"
-                className="h-6 w-6 rounded-full"
-              />
-            )}
-            <span>
-              Logged in as <strong>{session.user.name ?? session.user.email}</strong>
-            </span>
-          </div>
-        )}
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {messages.map((msg, i) => (
