@@ -31,14 +31,14 @@ if LLM_PROVIDER == "google":
     llm = ChatGoogleGenerativeAI(
         model=LLM_MODEL,
         temperature=LLM_TEMPERATURE,
-        max_tokens=LLM_MAX_TOKENS,
+        #max_tokens=LLM_MAX_TOKENS,
         #top_p=LLM_TOP_P, #top_p only works for some models
     )
 elif LLM_PROVIDER == "openai":
     llm = ChatOpenAI(
         model=LLM_MODEL,
         temperature=LLM_TEMPERATURE,
-        max_tokens=LLM_MAX_TOKENS,
+        #max_tokens=LLM_MAX_TOKENS,
         #top_p=LLM_TOP_P,
     )
 
@@ -174,15 +174,28 @@ def get_history(session_id: str):
         ttl=60 * 60 * 24,
     )
 
-# -------------------------------------------------
-# Exported chain (LangServe-compatible)
-# -------------------------------------------------
-chain = RunnableWithMessageHistory(
-    rag_chain,
+# If your rag_chain returns {"output": "<answer>", "sources": [...]}
+answer_only = rag_chain | RunnableLambda(lambda x: x["output"])
+
+chat_chain = RunnableWithMessageHistory(
+    answer_only,
     get_history,
     input_messages_key="input",
     history_messages_key="history",
 )
+
+# -------------------------------------------------
+# Exported chain (LangServe-compatible)
+# -------------------------------------------------
+# chain = RunnableWithMessageHistory(
+#     rag_chain,
+#     get_history,
+#     input_messages_key="input",
+#     history_messages_key="history",
+# )
+
+chain = chat_chain
+
 
 def sources_only(inputs: dict) -> dict:
     query = inputs["input"]

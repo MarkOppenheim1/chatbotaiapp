@@ -1,43 +1,102 @@
-function normalizeToText(value: any): string {
+function normalizeParts(value: any): string {
   if (!value) return "";
-
   if (typeof value === "string") return value;
 
-  // Gemini sometimes returns array-of-parts
+  // Gemini style parts: [{text:"..."}, ...]
   if (Array.isArray(value)) {
     return value
-      .map((part) => {
-        if (typeof part === "string") return part;
-        if (part?.text) return part.text;
-        if (part?.content) return normalizeToText(part.content);
+      .map((p) => {
+        if (typeof p === "string") return p;
+        if (p?.text) return p.text;
+        if (p?.content) return normalizeParts(p.content);
         return "";
       })
       .join("");
   }
 
-  // Handle object outputs (your new "sources" shape)
-  if (typeof value === "object") {
-    if (typeof value.output === "string") return value.output;   // { output: "..." }
-    if (typeof value.answer === "string") return value.answer;   // { answer: "..." }
-    if (typeof value.content === "string") return value.content; // { content: "..." }
+  // LangChain BaseMessage-like {content:"..."}
+  if (typeof value === "object" && typeof value.content === "string") {
+    return value.content;
   }
 
   return "";
 }
 
-function extractTextFromEvent(json: any): string {
-  // Most common LangServe stream shapes:
-  // 1) { content: ... } (old)
-  // 2) { output: ... }  (new)
-  // 3) { data: { output: ... } } (variant)
-  const candidate =
-    json?.content ??
-    json?.output ??
-    json?.data?.content ??
-    json?.data?.output ??
-    json;
+/**
+ * Unwrap common LangServe/LangChain wrappers until we find a string or message content.
+ * This handles cases like:
+ *  - { output: "..." }
+ *  - { output: { output: "..." } }
+ *  - { output: { kwargs: { content: "..." } } }
+ *  - { output: { message: { content: "..." } } }
+ *  - { output: { content: [...] } }
+ */
+function extractAnswerText(json: any): string {
+  if (!json) return "";
 
-  return normalizeToText(candidate);
+  // Streaming variants: sometimes nested under data
+  let v = json?.data ?? json;
+
+  // Ignore run_id-only frames
+  if (v?.run_id && Object.keys(v).length === 1) return "";
+
+  // If the event is { output: ..., sources: ... }, start from output
+  if (v?.output !== undefined) v = v.output;
+
+  // Unwrap repeated "output" nesting
+  // (LangServe can wrap your output inside another output)
+  for (let i = 0; i < 6; i++) {
+    if (v && typeof v === "object" && "output" in v) {
+      const next = (v as any).output;
+      // prevent infinite loop if output points to itself
+      if (next === v) break;
+      v = next;
+      continue;
+    }
+    break;
+  }
+
+  // Direct string
+  if (typeof v === "string") return v;
+
+  // Try common containers
+  if (v?.answer && typeof v.answer === "string") return v.answer;
+  if (v?.content) {
+    const t = normalizeParts(v.content);
+    if (t) return t;
+  }
+  if (v?.message) {
+    const t = normalizeParts(v.message?.content ?? v.message);
+    if (t) return t;
+  }
+  if (v?.kwargs) {
+    const t = normalizeParts(v.kwargs?.content ?? v.kwargs);
+    if (t) return t;
+  }
+  if (v?.lc_kwargs) {
+    const t = normalizeParts(v.lc_kwargs?.content ?? v.lc_kwargs);
+    if (t) return t;
+  }
+
+  // Last resort: if object has any stringy fields
+  if (typeof v === "object") {
+    const candidates = [
+      v?.text,
+      v?.completion,
+      v?.result,
+      v?.value,
+      v?.final,
+      v?.message?.content,
+      v?.kwargs?.content,
+      v?.lc_kwargs?.content,
+    ];
+    for (const c of candidates) {
+      const t = normalizeParts(c);
+      if (t) return t;
+    }
+  }
+
+  return "";
 }
 
 export async function POST(req: Request) {
@@ -47,14 +106,8 @@ export async function POST(req: Request) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      input: {
-        input: body.input,   // <-- matches input_messages_key="input"
-      },
-      config: {
-        configurable: {
-          session_id: body.session_id,
-        },
-      },
+      input: { input: body.input },
+      config: { configurable: { session_id: body.session_id } },
     }),
   });
 
@@ -79,10 +132,12 @@ export async function POST(req: Request) {
 
         buffer += decoder.decode(value, { stream: true });
 
+        // Keep your original approach (works in practice) but handle CRLF
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
-        for (const line of lines) {
+        for (let rawLine of lines) {
+          const line = rawLine.replace(/\r$/, ""); // strip CR
           if (!line.startsWith("data: ")) continue;
 
           const payload = line.slice("data: ".length).trim();
@@ -90,14 +145,14 @@ export async function POST(req: Request) {
 
           try {
             const json = JSON.parse(payload);
-            const text = extractTextFromEvent(json);
 
-            // Debug (uncomment to see *something* even if no text matches)
-            // controller.enqueue(`\n[debug keys] ${Object.keys(json).join(",")}\n`);
+            // 🔍 TEMP DEBUG (uncomment for 1 run if needed)
+            // controller.enqueue(`\n[debug] ${payload}\n`);
 
+            const text = extractAnswerText(json);
             if (text) controller.enqueue(text);
           } catch {
-            // ignore non-JSON lines
+            // ignore non-JSON
           }
         }
       }
