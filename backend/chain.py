@@ -6,26 +6,41 @@ from pathlib import Path
 from typing import Any
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 
 from langchain_core.runnables import RunnableWithMessageHistory, RunnableLambda
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_chroma import Chroma
 
+from config import (
+    LLM_PROVIDER,
+    LLM_MODEL,
+    LLM_TEMPERATURE,
+    LLM_MAX_TOKENS,
+    LLM_TOP_P,
+    EMBEDDING_PROVIDER,
+    EMBEDDING_MODEL,
+    RETRIEVAL_K,
+)
+
+
 # -------------------------------------------------
 # LLMs
 # -------------------------------------------------
-llmOpenAI = ChatOpenAI(
-    model="gpt-5-nano",
-    temperature=0.7,
-)
-
-llmGemini = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    temperature=0.7,
-)
-
-llm = llmOpenAI  # switch if needed
+if LLM_PROVIDER == "google":
+    llm = ChatGoogleGenerativeAI(
+        model=LLM_MODEL,
+        temperature=LLM_TEMPERATURE,
+        max_tokens=LLM_MAX_TOKENS,
+        #top_p=LLM_TOP_P, #top_p only works for some models
+    )
+elif LLM_PROVIDER == "openai":
+    llm = ChatOpenAI(
+        model=LLM_MODEL,
+        temperature=LLM_TEMPERATURE,
+        max_tokens=LLM_MAX_TOKENS,
+        #top_p=LLM_TOP_P,
+    )
 
 # -------------------------------------------------
 # Vector DB (must match ingest.py)
@@ -33,7 +48,10 @@ llm = llmOpenAI  # switch if needed
 CHROMA_DIR = Path(__file__).parent / "chroma_db"
 COLLECTION = "rag_docs"
 
-embeddings = OpenAIEmbeddings()
+if EMBEDDING_PROVIDER == "openai":
+    embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+elif EMBEDDING_PROVIDER == "google":
+    embeddings = GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL)
 
 vectordb = Chroma(
     persist_directory=str(CHROMA_DIR),
@@ -41,7 +59,7 @@ vectordb = Chroma(
     embedding_function=embeddings,
 )
 
-retriever = vectordb.as_retriever(search_kwargs={"k": 2})
+retriever = vectordb.as_retriever(search_kwargs={"k": RETRIEVAL_K})
 
 # -------------------------------------------------
 # Helpers

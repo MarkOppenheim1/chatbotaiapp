@@ -168,9 +168,20 @@ export default function ChatUI() {
           </div>
         </div>
 
-        <div className="px-4 py-1 text-xs text-gray-500">
-          Signed in as {session?.user?.email ?? session?.user?.name}
-        </div>
+        {session?.user && (
+          <div className="px-4 py-2 text-sm text-gray-700 flex items-center gap-2">
+            {session.user.image && (
+              <img
+                src={session.user.image}
+                alt="avatar"
+                className="h-6 w-6 rounded-full"
+              />
+            )}
+            <span>
+              Logged in as <strong>{session.user.name ?? session.user.email}</strong>
+            </span>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {messages.map((msg, i) => (

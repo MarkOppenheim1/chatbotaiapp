@@ -7,11 +7,17 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 from langchain_openai import OpenAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 # If you want Google embeddings instead, swap to:
 # from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
+
+from config import (
+    EMBEDDING_PROVIDER,
+    EMBEDDING_MODEL,
+)
 
 DATA_DIR = Path(__file__).parent / "data"
 CHROMA_DIR = Path(__file__).parent / "chroma_db"
@@ -56,8 +62,10 @@ def main():
     splitter = RecursiveCharacterTextSplitter(chunk_size=900, chunk_overlap=150)
     chunks = splitter.split_documents(raw_docs)
 
-    embeddings = OpenAIEmbeddings()
-    # embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+    if EMBEDDING_PROVIDER == 'openai':
+        embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+    elif EMBEDDING_PROVIDER == 'google':
+        embeddings = GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL)
 
     # Rebuild the collection cleanly each run
     vectordb = Chroma(
