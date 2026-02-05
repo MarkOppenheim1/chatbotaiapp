@@ -33,19 +33,68 @@ export default function ChatUI() {
 
   if (!sessionKey) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <button
-          onClick={() => signIn("github")}
-          className="rounded bg-black px-4 py-2 text-white"
-        >
-          Sign in with GitHub
-        </button>
-        <button
-          onClick={() => signIn("google")}
-          className="rounded bg-white px-4 py-2 text-black border"
-        >
-          Sign in with Google
-        </button>
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 p-6">
+        <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl border border-gray-100">
+          <div className="mb-6">
+            <div className="text-2xl font-semibold text-gray-900">Welcome</div>
+            <div className="mt-1 text-sm text-gray-600">
+              Sign in to start chatting.
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={() => signIn("github")}
+              className="w-full inline-flex items-center justify-center gap-3 rounded-xl bg-gray-900 px-4 py-3 text-white font-medium shadow-sm transition
+                        hover:bg-gray-800 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-gray-900/30"
+            >
+              {/* GitHub icon */}
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 16 16"
+                className="h-5 w-5 fill-white"
+              >
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+              </svg>
+              Continue with GitHub
+            </button>
+
+            <button
+              onClick={() => signIn("google")}
+              className="w-full inline-flex items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-gray-900 font-medium shadow-sm border border-gray-200 transition
+                        hover:bg-gray-50 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            >
+              {/* Google icon */}
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 48 48"
+                className="h-5 w-5"
+              >
+                <path
+                  fill="#FFC107"
+                  d="M43.611 20.083H42V20H24v8h11.303C33.694 32.657 29.223 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.273 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.651-.389-3.917Z"
+                />
+                <path
+                  fill="#FF3D00"
+                  d="M6.306 14.691 12.88 19.51C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.273 4 24 4 16.318 4 9.656 8.337 6.306 14.691Z"
+                />
+                <path
+                  fill="#4CAF50"
+                  d="M24 44c5.121 0 9.795-1.966 13.314-5.168l-6.146-5.202C29.137 35.091 26.705 36 24 36c-5.202 0-9.66-3.319-11.283-7.946l-6.525 5.025C9.505 39.556 16.227 44 24 44Z"
+                />
+                <path
+                  fill="#1976D2"
+                  d="M43.611 20.083H42V20H24v8h11.303c-.79 2.216-2.305 4.087-4.256 5.263l.003-.002 6.146 5.202C36.759 39.07 44 34 44 24c0-1.341-.138-2.651-.389-3.917Z"
+                />
+              </svg>
+              Continue with Google
+            </button>
+          </div>
+
+          <div className="mt-6 text-xs text-gray-500">
+            By continuing, you agree to our terms and privacy policy.
+          </div>
+        </div>
       </div>
     );
   }
