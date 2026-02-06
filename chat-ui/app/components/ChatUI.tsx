@@ -105,18 +105,21 @@ export default function ChatUI() {
   const { data: session, status } = useSession();
   const userId = session?.user?.id;
 
-  // ✅ ALL hooks declared before any conditional return
+  // --- state (all hooks at top, no conditional hooks) ---
   const [chatId, setChatId] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatMeta[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: "Hello! Ask me something." },
   ]);
   const [input, setInput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  // 3-dot menu + rename state
+  const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-
 
   const sessionKey = userId && chatId ? `user:${userId}:chat:${chatId}` : null;
 
@@ -125,7 +128,17 @@ export default function ChatUI() {
     [chats, chatId]
   );
 
-  // Load chats when logged in
+  // close ⋯ menu on outside click
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target as Node)) setMenuOpenFor(null);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  // --- load chats on login ---
   useEffect(() => {
     if (!userId) return;
 
@@ -135,7 +148,6 @@ export default function ChatUI() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId }),
       });
-
       const listData = await listRes.json();
       const loaded: ChatMeta[] = listData.chats ?? [];
       setChats(loaded);
@@ -157,7 +169,7 @@ export default function ChatUI() {
     })();
   }, [userId]);
 
-  // Load messages when switching chats
+  // --- load messages when switching chat ---
   useEffect(() => {
     if (!userId || !chatId) return;
 
@@ -184,6 +196,7 @@ export default function ChatUI() {
     })();
   }, [userId, chatId]);
 
+  // --- helpers ---
   async function fetchSources(userMessage: string, sess: string) {
     try {
       const res = await fetch("/api/sources", {
@@ -199,14 +212,35 @@ export default function ChatUI() {
     }
   }
 
+  async function renameChat(targetChatId: string, title: string) {
+    if (!userId) return;
+
+    const trimmed = title.trim();
+    const finalTitle = trimmed.length ? trimmed.slice(0, 80) : "Untitled chat";
+
+    const res = await fetch("/api/chats/rename", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, chat_id: targetChatId, title: finalTitle }),
+    });
+    if (!res.ok) return;
+
+    const updated = await res.json(); // { chat_id, title }
+    setChats((prev) =>
+      prev.map((c) => (c.chat_id === updated.chat_id ? { ...c, title: updated.title } : c))
+    );
+  }
+
   async function createNewChat() {
     if (!userId) return;
+
     const res = await fetch("/api/chats/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: userId, title: "New chat" }),
     });
     const created: ChatMeta = await res.json();
+
     setChats((prev) => [created, ...prev]);
     setChatId(created.chat_id);
     setMessages([{ role: "assistant", content: "Hello! Ask me something." }]);
@@ -214,6 +248,7 @@ export default function ChatUI() {
 
   async function deleteChat(targetChatId: string) {
     if (!userId) return;
+
     const ok = confirm("Delete this chat? This cannot be undone.");
     if (!ok) return;
 
@@ -223,39 +258,22 @@ export default function ChatUI() {
       body: JSON.stringify({ user_id: userId, chat_id: targetChatId }),
     });
 
-    setChats((prev) => prev.filter((c) => c.chat_id !== targetChatId));
+    setChats((prev) => {
+      const remaining = prev.filter((c) => c.chat_id !== targetChatId);
 
-    if (chatId === targetChatId) {
-      // choose another chat (prefer the first remaining), or create a new one
-      const remaining = chats.filter((c) => c.chat_id !== targetChatId);
-      if (remaining.length) {
-        setChatId(remaining[0].chat_id);
-      } else {
-        await createNewChat();
+      // if deleting current, move to another
+      if (chatId === targetChatId) {
+        if (remaining.length) {
+          setChatId(remaining[0].chat_id);
+        } else {
+          // no remaining: create a new one
+          void createNewChat();
+        }
       }
-    }
-  }
 
-  async function renameChat(targetChatId: string, title: string) {
-    if (!userId) return;
-
-    const trimmed = title.trim();
-    const finalTitle = trimmed.length ? trimmed : "Untitled chat";
-
-    const res = await fetch("/api/chats/rename", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, chat_id: targetChatId, title: finalTitle }),
+      return remaining;
     });
-
-    if (!res.ok) return;
-
-    const updated = await res.json(); // { chat_id, title }
-    setChats((prev) =>
-      prev.map((c) => (c.chat_id === updated.chat_id ? { ...c, title: updated.title } : c))
-    );
   }
-
 
   async function sendMessage() {
     if (!input.trim() || isStreaming || !sessionKey) return;
@@ -264,11 +282,34 @@ export default function ChatUI() {
     const userMessage = input;
     setInput("");
 
+    // optimistic UI
     setMessages((msgs) => [
       ...msgs,
       { role: "user", content: userMessage },
       { role: "assistant", content: "", sources: [] },
     ]);
+
+    // ✅ auto-rename only if title is still default-ish
+    if (chatId) {
+      const currentTitle = activeChat?.title ?? "";
+      const isDefaultTitle =
+        !currentTitle ||
+        currentTitle === "New chat" ||
+        currentTitle === "Untitled chat" ||
+        currentTitle === "Chat";
+
+      if (isDefaultTitle) {
+        const suggested = userMessage.trim().slice(0, 40);
+        if (suggested) {
+          // optimistic sidebar update
+          setChats((prev) =>
+            prev.map((c) => (c.chat_id === chatId ? { ...c, title: suggested } : c))
+          );
+          // persist (don’t block streaming)
+          void renameChat(chatId, suggested);
+        }
+      }
+    }
 
     try {
       const res = await fetch("/api/chat", {
@@ -288,10 +329,7 @@ export default function ChatUI() {
         text += decoder.decode(value);
         setMessages((msgs) => {
           const updated = [...msgs];
-          updated[updated.length - 1] = {
-            ...updated[updated.length - 1],
-            content: text,
-          };
+          updated[updated.length - 1] = { ...updated[updated.length - 1], content: text };
           return updated;
         });
       }
@@ -313,14 +351,12 @@ export default function ChatUI() {
     }
   }
 
-  // --------------------------------------------
-  // Render
-  // --------------------------------------------
+  // --- RENDER ---
   if (status === "loading") {
     return <div>Loading session...</div>;
   }
 
-  // Login screen (no hooks below this point!)
+  // login screen
   if (!userId) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 p-6">
@@ -377,7 +413,7 @@ export default function ChatUI() {
     );
   }
 
-  // Main app (user is logged in)
+  // main app
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
@@ -398,6 +434,7 @@ export default function ChatUI() {
             <ul className="space-y-1">
               {chats.map((c) => {
                 const isActive = c.chat_id === chatId;
+
                 return (
                   <li key={c.chat_id}>
                     <div
@@ -406,10 +443,12 @@ export default function ChatUI() {
                       }`}
                       onClick={() => {
                         if (isStreaming) return;
+                        setMenuOpenFor(null);
+                        setRenamingId(null);
                         setChatId(c.chat_id);
                       }}
-                      title={c.title}
                     >
+                      {/* Title / rename input */}
                       <div className="min-w-0 flex-1">
                         {renamingId === c.chat_id ? (
                           <input
@@ -430,18 +469,14 @@ export default function ChatUI() {
                               setRenamingId(null);
                             }}
                             className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring"
+                            onClick={(e) => e.stopPropagation()}
                           />
                         ) : (
                           <div
                             className={`truncate text-sm ${
                               isActive ? "font-semibold text-blue-800" : "text-gray-800"
                             }`}
-                            onDoubleClick={(e) => {
-                              e.stopPropagation(); // prevents chat switch
-                              setRenamingId(c.chat_id);
-                              setRenameValue(c.title || "");
-                            }}
-                            title="Double click to rename"
+                            title={c.title || "Untitled chat"}
                           >
                             {c.title || "Untitled chat"}
                           </div>
@@ -452,16 +487,49 @@ export default function ChatUI() {
                         )}
                       </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void deleteChat(c.chat_id);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-xs text-gray-500 hover:text-red-600 transition px-2 py-1 rounded"
-                        title="Delete chat"
-                      >
-                        🗑
-                      </button>
+                      {/* ⋯ menu */}
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenFor((prev) => (prev === c.chat_id ? null : c.chat_id));
+                          }}
+                          className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-800 transition px-2 py-1 rounded"
+                          aria-label="More"
+                          title="More"
+                        >
+                          ⋯
+                        </button>
+
+                        {menuOpenFor === c.chat_id && (
+                          <div
+                            ref={menuRef}
+                            className="absolute right-0 mt-1 w-36 rounded-lg border border-gray-200 bg-white shadow-lg z-50"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                              onClick={() => {
+                                setMenuOpenFor(null);
+                                setRenamingId(c.chat_id);
+                                setRenameValue(c.title || "");
+                              }}
+                            >
+                              Rename
+                            </button>
+
+                            <button
+                              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-gray-50"
+                              onClick={async () => {
+                                setMenuOpenFor(null);
+                                await deleteChat(c.chat_id);
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </li>
                 );
@@ -477,9 +545,7 @@ export default function ChatUI() {
           {/* Top bar */}
           <div className="border-b px-4 py-3 flex items-center justify-between">
             <div className="min-w-0">
-              <div className="font-semibold truncate">
-                💬 {activeChat?.title ?? "Chat"}
-              </div>
+              <div className="font-semibold truncate">💬 {activeChat?.title ?? "Chat"}</div>
               <div className="text-xs text-gray-500 truncate">
                 {activeChat ? `Chat ID: ${activeChat.chat_id}` : ""}
               </div>
@@ -498,70 +564,58 @@ export default function ChatUI() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {!sessionKey ? (
-              <div className="text-sm text-gray-500">Loading chat…</div>
-            ) : (
-              <>
-                {messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex ${
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[75%] rounded-lg px-4 py-2 ${
-                        msg.role === "user"
-                          ? "bg-purple-600 text-white"
-                          : "bg-green-200 text-gray-900"
-                      }`}
-                    >
-                      {msg.role === "assistant" ? (
-                        <>
-                          <MarkdownMessage content={msg.content} />
+            {messages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[75%] rounded-lg px-4 py-2 ${
+                    msg.role === "user"
+                      ? "bg-purple-600 text-white"
+                      : "bg-green-200 text-gray-900"
+                  }`}
+                >
+                  {msg.role === "assistant" ? (
+                    <>
+                      <MarkdownMessage content={msg.content} />
 
-                          {!!msg.sources?.length && (
-                            <div className="mt-3 border-t border-black/10 pt-2 text-xs text-gray-700">
-                              <div className="font-semibold mb-1">Sources</div>
-                              <ul className="space-y-2">
-                                {msg.sources.map((s, idx) => (
-                                  <li key={idx}>
-                                    <div className="font-medium">
-                                      [{idx + 1}]{" "}
-                                      <a
-                                        href={`http://localhost:8001/files?path=${encodeURIComponent(
-                                          s.source
-                                        )}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 underline hover:text-blue-800"
-                                      >
-                                        {s.source}
-                                      </a>
-                                      {s.page ? ` (p. ${s.page})` : ""}
-                                    </div>
-                                    {!!s.snippet && (
-                                      <div className="opacity-80">{s.snippet}</div>
-                                    )}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        msg.content
+                      {!!msg.sources?.length && (
+                        <div className="mt-3 border-t border-black/10 pt-2 text-xs text-gray-700">
+                          <div className="font-semibold mb-1">Sources</div>
+                          <ul className="space-y-2">
+                            {msg.sources.map((s, idx) => (
+                              <li key={idx}>
+                                <div className="font-medium">
+                                  [{idx + 1}]{" "}
+                                  <a
+                                    href={`http://localhost:8001/files?path=${encodeURIComponent(
+                                      s.source
+                                    )}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 underline hover:text-blue-800"
+                                  >
+                                    {s.source}
+                                  </a>
+                                  {s.page ? ` (p. ${s.page})` : ""}
+                                </div>
+                                {!!s.snippet && <div className="opacity-80">{s.snippet}</div>}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       )}
-                    </div>
-                  </div>
-                ))}
+                    </>
+                  ) : (
+                    msg.content
+                  )}
+                </div>
+              </div>
+            ))}
 
-                {isStreaming && (
-                  <div className="text-sm text-gray-500 italic">
-                    Assistant is typing…
-                  </div>
-                )}
-              </>
+            {isStreaming && (
+              <div className="text-sm text-gray-500 italic">Assistant is typing…</div>
             )}
           </div>
 
