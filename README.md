@@ -1,5 +1,7 @@
 # AI Chat Web App
 
+I developed this Application to teach myself about modern ways to build AI Applications.
+
 A production-style, ChatGPT-like AI chat application built with **Next.js**, **LangServe**, and **LangChain**.
 
 It supports **streaming responses**, **multi-chat memory**, **RAG with sources**, and **OAuth authentication** (GitHub & Google), backed by **Redis**.
