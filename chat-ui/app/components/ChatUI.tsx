@@ -638,9 +638,7 @@ export default function ChatUI() {
                                 <div className="font-medium">
                                   [{idx + 1}]{" "}
                                   <a
-                                    href={`${BACKEND_URL}/files?path=${encodeURIComponent(
-                                      s.source
-                                    )}`}
+                                    href={`/api/files?path=${encodeURIComponent(s.source)}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-blue-600 underline hover:text-blue-800"
