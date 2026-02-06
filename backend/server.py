@@ -58,6 +58,10 @@ def chat_session_id(user_id: str, chat_id: str) -> str:
     return f"user:{user_id}:chat:{chat_id}"
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.post("/chat/clear")
 def clear_chat(req: ClearChatRequest):
     history = RedisChatMessageHistory(

@@ -122,6 +122,10 @@ export default function ChatUI() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
+  const [backendOk, setBackendOk] = useState<boolean | null>(null);
+  const [backendError, setBackendError] = useState<string>("");
+
+
   const sessionKey = userId && chatId ? `user:${userId}:chat:${chatId}` : null;
 
   const activeChat = useMemo(
@@ -196,6 +200,27 @@ export default function ChatUI() {
       }
     })();
   }, [userId, chatId]);
+
+  async function checkBackend() {
+    try {
+      const res = await fetch("/api/health", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+      setBackendOk(true);
+      setBackendError("");
+    } catch (e: any) {
+      setBackendOk(false);
+      setBackendError(e?.message ?? "Backend unreachable");
+    }
+  }
+
+
+  useEffect(() => {
+    checkBackend();
+    // optional: re-check every 15s
+    const id = setInterval(checkBackend, 15000);
+    return () => clearInterval(id);
+  }, []);
 
   // --- helpers ---
   async function fetchSources(userMessage: string, sess: string) {
@@ -355,6 +380,29 @@ export default function ChatUI() {
   // --- RENDER ---
   if (status === "loading") {
     return <div>Loading session...</div>;
+  }
+
+  if (backendOk === false) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
+        <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow border">
+          <div className="text-lg font-semibold text-gray-900">Backend offline</div>
+          <div className="mt-2 text-sm text-gray-600">
+            The API server is unreachable. Start your backend and try again.
+          </div>
+          <div className="mt-3 rounded-lg bg-gray-100 p-3 text-xs text-gray-700">
+            {backendError || "No details"}
+            <div className="mt-1 opacity-70">{BACKEND_URL}</div>
+          </div>
+          <button
+            onClick={checkBackend}
+            className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // login screen
@@ -623,7 +671,7 @@ export default function ChatUI() {
           {/* Composer */}
           <div className="border-t p-3 flex gap-2">
             <input
-              disabled={isStreaming || !sessionKey}
+              disabled={isStreaming || !sessionKey || backendOk !== true}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
