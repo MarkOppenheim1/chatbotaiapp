@@ -222,9 +222,5 @@ def sources_only(inputs: dict) -> dict:
     # IMPORTANT: output must be a string for LangServe tracer; put sources separately
     return {"output": "", "sources": sources}
 
-sources_chain = RunnableWithMessageHistory(
-    RunnableLambda(sources_only),
-    get_history,
-    input_messages_key="input",
-    history_messages_key="history",
-)
+# ✅ IMPORTANT: do NOT wrap sources_chain with RunnableWithMessageHistory
+sources_chain = RunnableLambda(sources_only)
