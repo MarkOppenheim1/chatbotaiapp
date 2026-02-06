@@ -41,8 +41,6 @@ These files are **not committed to GitHub** and must be created locally.
 
 ### Backend Configuration (`backend/.env`)
 
-Required for running the LangServe backend.
-
 ```env
 # === LLM Provider (choose one) ===
 OPENAI_API_KEY=sk-...
@@ -67,8 +65,6 @@ Notes:
 
 ### Frontend Configuration (`chat-ui/.env.local`)
 
-Required for authentication and backend communication.
-
 ```env
 # === NextAuth ===
 NEXTAUTH_URL=http://localhost:3000
@@ -92,6 +88,98 @@ Notes:
   http://localhost:3000/api/auth/callback/github
   http://localhost:3000/api/auth/callback/google
   ```
+
+---
+
+## 📥 Data Ingestion & RAG Pipeline
+
+The application uses a **Retrieval-Augmented Generation (RAG)** pipeline.
+Before the chat can retrieve knowledge, documents must be **ingested and embedded**.
+
+---
+
+### Data Directory
+
+All source documents live in:
+
+```
+backend/data/
+```
+
+Supported formats:
+- `.txt`
+- `.md`
+- `.pdf`
+
+You can organize files into subfolders if desired.
+
+Example:
+```
+backend/data/
+├── braveheart.txt
+├── docs/
+│   ├── notes.md
+│   └── reference.pdf
+```
+
+---
+
+### Ingestion Process
+
+The ingestion step:
+1. Loads all files from `backend/data/`
+2. Splits documents into chunks
+3. Generates embeddings
+4. Stores vectors in a **local Chroma database**
+
+This is a **one-time (or occasional) batch process**, not run on every request.
+
+---
+
+### Running Ingestion
+
+From the backend directory:
+
+```bash
+cd backend
+python ingest.py
+```
+
+On success you should see output like:
+```
+Ingested 123 chunks into chroma_db/
+```
+
+This creates / updates:
+```
+backend/chroma_db/
+```
+
+---
+
+### Important Notes
+
+- The same **embedding provider** must be used in:
+  - `ingest.py`
+  - `chain.py`
+- If you change:
+  - documents
+  - chunk size
+  - embedding model
+  - embedding provider  
+  you must **re-run ingestion**.
+- The vector database is stored locally on disk and reused by the backend.
+
+---
+
+### How Retrieval Works at Runtime
+
+At chat time:
+1. User sends a message
+2. The backend queries Chroma for the top `k` relevant chunks
+3. Retrieved text is injected into the LLM prompt
+4. The LLM generates a response grounded in the retrieved context
+5. Source references are returned alongside the answer
 
 ---
 
@@ -128,26 +216,11 @@ See **ARCHITECTURE.md** for a deeper breakdown.
 
 ---
 
-## 📦 Tech Stack
-
-- Frontend: Next.js, Tailwind CSS, Auth.js / NextAuth
-- Backend: FastAPI, LangServe, LangChain
-- Memory: Redis
-- LLMs: OpenAI, Google Gemini
-- Observability: LangSmith
-
----
-
 ## 🔐 Security Notes
 
 - API keys are server-side only
-- OAuth handled via NextAuth
+- OAuth handled by NextAuth
 - Redis never exposed to the browser
 - Backend accessed through Next.js API routes
+- File serving is authenticated
 - `.env` files are excluded from version control
-
----
-
-## 📜 License
-
-MIT
