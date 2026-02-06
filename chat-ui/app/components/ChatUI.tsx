@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MarkdownMessage from "./MarkdownMessage";
 import { signIn, signOut, useSession } from "next-auth/react";
+import { BACKEND_URL } from "@/app/lib/backend";
 
 type Source = {
   source: string;
@@ -589,7 +590,7 @@ export default function ChatUI() {
                                 <div className="font-medium">
                                   [{idx + 1}]{" "}
                                   <a
-                                    href={`http://localhost:8001/files?path=${encodeURIComponent(
+                                    href={`${BACKEND_URL}/files?path=${encodeURIComponent(
                                       s.source
                                     )}`}
                                     target="_blank"

@@ -1,3 +1,5 @@
+import { BACKEND_URL } from "@/app/lib/backend";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -6,7 +8,7 @@ export async function POST(req: Request) {
     const inputPayload =
       typeof body.input === "string" ? { input: body.input } : body.input ?? {};
 
-    const res = await fetch("http://localhost:8001/sources/invoke", {
+    const res = await fetch(`${BACKEND_URL}/sources/invoke`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

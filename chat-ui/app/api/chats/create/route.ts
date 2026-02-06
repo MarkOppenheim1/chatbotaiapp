@@ -1,7 +1,9 @@
+import { BACKEND_URL } from "@/app/lib/backend";
+
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const res = await fetch("http://localhost:8001/chats", {
+  const res = await fetch(`${BACKEND_URL}/chats`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

@@ -1,3 +1,5 @@
+import { BACKEND_URL } from "@/app/lib/backend";
+
 function normalizeParts(value: any): string {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -102,7 +104,7 @@ function extractAnswerText(json: any): string {
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const res = await fetch("http://localhost:8001/chat/stream", {
+  const res = await fetch(`${BACKEND_URL}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
