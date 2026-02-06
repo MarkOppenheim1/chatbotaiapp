@@ -38,6 +38,12 @@ class DeleteChatRequest(BaseModel):
     user_id: str
     chat_id: str
 
+class RenameChatRequest(BaseModel):
+    user_id: str
+    chat_id: str
+    title: str
+
+
 REDIS_URL = os.environ.get("REDIS_URL")
 r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
@@ -129,3 +135,18 @@ def delete_chat(user_id: str, chat_id: str):
 
     return {"status": "deleted"}
 
+@app.post("/chats/rename")
+def rename_chat(req: RenameChatRequest):
+    raw = r.get(chat_meta_key(req.user_id, req.chat_id))
+    if not raw:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    meta = json.loads(raw)
+    meta["title"] = (req.title or "").strip()[:80] or "Untitled chat"
+    meta["updated_at"] = int(time.time())
+
+    r.set(chat_meta_key(req.user_id, req.chat_id), json.dumps(meta))
+    # bump ordering
+    r.zadd(user_chats_key(req.user_id), {req.chat_id: meta["updated_at"]})
+
+    return {"chat_id": req.chat_id, "title": meta["title"]}

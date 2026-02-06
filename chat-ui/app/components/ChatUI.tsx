@@ -114,6 +114,9 @@ export default function ChatUI() {
     { role: "assistant", content: "Hello! Ask me something." },
   ]);
   const [input, setInput] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
 
   const sessionKey = userId && chatId ? `user:${userId}:chat:${chatId}` : null;
 
@@ -232,6 +235,27 @@ export default function ChatUI() {
       }
     }
   }
+
+  async function renameChat(targetChatId: string, title: string) {
+    if (!userId) return;
+
+    const trimmed = title.trim();
+    const finalTitle = trimmed.length ? trimmed : "Untitled chat";
+
+    const res = await fetch("/api/chats/rename", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, chat_id: targetChatId, title: finalTitle }),
+    });
+
+    if (!res.ok) return;
+
+    const updated = await res.json(); // { chat_id, title }
+    setChats((prev) =>
+      prev.map((c) => (c.chat_id === updated.chat_id ? { ...c, title: updated.title } : c))
+    );
+  }
+
 
   async function sendMessage() {
     if (!input.trim() || isStreaming || !sessionKey) return;
@@ -386,15 +410,44 @@ export default function ChatUI() {
                       }}
                       title={c.title}
                     >
-                      <div className="min-w-0">
-                        <div
-                          className={`truncate text-sm ${
-                            isActive ? "font-semibold text-blue-800" : "text-gray-800"
-                          }`}
-                        >
-                          {c.title || "Untitled chat"}
-                        </div>
-                        {isActive && (
+                      <div className="min-w-0 flex-1">
+                        {renamingId === c.chat_id ? (
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={async (e) => {
+                              if (e.key === "Enter") {
+                                await renameChat(c.chat_id, renameValue);
+                                setRenamingId(null);
+                              }
+                              if (e.key === "Escape") {
+                                setRenamingId(null);
+                              }
+                            }}
+                            onBlur={async () => {
+                              await renameChat(c.chat_id, renameValue);
+                              setRenamingId(null);
+                            }}
+                            className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm focus:outline-none focus:ring"
+                          />
+                        ) : (
+                          <div
+                            className={`truncate text-sm ${
+                              isActive ? "font-semibold text-blue-800" : "text-gray-800"
+                            }`}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation(); // prevents chat switch
+                              setRenamingId(c.chat_id);
+                              setRenameValue(c.title || "");
+                            }}
+                            title="Double click to rename"
+                          >
+                            {c.title || "Untitled chat"}
+                          </div>
+                        )}
+
+                        {isActive && renamingId !== c.chat_id && (
                           <div className="text-[11px] text-blue-700/70">Active</div>
                         )}
                       </div>
