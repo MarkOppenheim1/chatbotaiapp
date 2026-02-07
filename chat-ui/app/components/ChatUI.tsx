@@ -6,10 +6,13 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { BACKEND_URL } from "@/app/lib/backend";
 
 type Source = {
-  source: string;
+  source?: string;            // legacy stable identifier (r2://bucket/key)
+  url?: string;               // presigned or public URL (preferred)
+  label?: string;             // friendly filename/label
   page: number | null;
   snippet: string;
 };
+
 
 type Message = {
   role: "user" | "assistant";
@@ -638,12 +641,23 @@ export default function ChatUI() {
                                 <div className="font-medium">
                                   [{idx + 1}]{" "}
                                   <a
-                                    href={`/api/files?path=${encodeURIComponent(s.source)}`}
+                                    href={s.url ?? `/api/files?path=${encodeURIComponent(s.source ?? "")}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-blue-600 underline hover:text-blue-800"
                                   >
-                                    {s.source}
+                                    {s.label ??
+                                      (s.url
+                                        ? decodeURIComponent(
+                                            (() => {
+                                              try {
+                                                return new URL(s.url).pathname.split("/").pop() ?? s.url;
+                                              } catch {
+                                                return s.url;
+                                              }
+                                            })()
+                                          )
+                                        : s.source)}
                                   </a>
                                   {s.page ? ` (p. ${s.page})` : ""}
                                 </div>

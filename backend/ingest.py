@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import tempfile
 import hashlib
 from pathlib import Path
 
@@ -14,71 +15,104 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores.upstash import UpstashVectorStore
 from langchain_community.document_loaders import PyPDFLoader
 
+from r2_utils import get_r2_client, list_keys
+
 from config import (
     EMBEDDING_PROVIDER,
     EMBEDDING_MODEL,
 )
 
-DATA_DIR = Path(__file__).parent / "data"
-COLLECTION = "rag_docs"  # used as Upstash "namespace" conceptually; kept for consistency
+COLLECTION = "rag_docs"
+
+TEXT_EXTS = {".txt", ".md"}
+PDF_EXTS = {".pdf"}
 
 
-def load_text_docs(data_dir: Path) -> list[Document]:
+def load_r2_docs() -> list[Document]:
+    bucket = os.environ["R2_BUCKET_NAME"]
+    prefix = os.environ.get("R2_PREFIX", "")
+    print(prefix)
+    s3 = get_r2_client()
+
+    keys = list_keys(bucket=bucket, prefix=prefix)
+
     docs: list[Document] = []
-    for p in data_dir.rglob("*"):
-        if not p.is_file():
+    for key in keys:
+        suffix = Path(key).suffix.lower()
+        if suffix not in TEXT_EXTS and suffix not in PDF_EXTS:
             continue
-        if p.suffix.lower() in [".txt", ".md"]:
+
+        obj = s3.get_object(Bucket=bucket, Key=key)
+        body: bytes = obj["Body"].read()
+
+        if suffix in TEXT_EXTS:
+            text = body.decode("utf-8", errors="ignore")
             docs.append(
                 Document(
-                    page_content=p.read_text(encoding="utf-8", errors="ignore"),
-                    metadata={"source": str(p)}
+                    page_content=text,
+                    metadata={
+                        "source": f"r2://{bucket}/{key}",
+                        "r2_bucket": bucket,
+                        "r2_key": key,
+                    },
                 )
             )
-    return docs
+        else:
+            tmp_path = None
+            try:
+                fd, tmp_path = tempfile.mkstemp(suffix=".pdf")
+                with os.fdopen(fd, "wb") as f:
+                    f.write(body)
+
+                loader = PyPDFLoader(tmp_path)
+                pdf_docs = loader.load()
+
+                for d in pdf_docs:
+                    d.metadata["source"] = f"r2://{bucket}/{key}"
+                    d.metadata["r2_bucket"] = bucket
+                    d.metadata["r2_key"] = key
+
+                docs.extend(pdf_docs)
+
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
 
 
-def load_pdf_docs(data_dir: Path) -> list[Document]:
-    docs: list[Document] = []
-    for p in data_dir.rglob("*.pdf"):
-        loader = PyPDFLoader(str(p))
-        pdf_docs = loader.load()  # one Document per page, includes metadata like 'page'
-        for d in pdf_docs:
-            d.metadata["source"] = str(p)
-        docs.extend(pdf_docs)
     return docs
 
 
 def _stable_chunk_id(doc: Document, idx: int) -> str:
     """
     Deterministic ID so re-running ingest updates instead of duplicating.
-    Includes source + page (if any) + index + content hash.
+    Uses: r2 key + page (if any) + idx + content hash
     """
-    src = str(doc.metadata.get("source", ""))
+    key = str(doc.metadata.get("r2_key", doc.metadata.get("source", "")))
     page = str(doc.metadata.get("page", ""))
     content = doc.page_content or ""
     digest = hashlib.sha1(content.encode("utf-8")).hexdigest()
-    return f"{src}|p={page}|i={idx}|h={digest}"
+    return f"{key}|p={page}|i={idx}|h={digest}"
 
 
 def main():
-    if not DATA_DIR.exists():
-        raise SystemExit(f"Create {DATA_DIR} and add files first (md/txt/pdf).")
+    # Required env
+    for v in [
+        "R2_ACCOUNT_ID",
+        "R2_ACCESS_KEY_ID",
+        "R2_SECRET_ACCESS_KEY",
+        "R2_BUCKET_NAME",
+        "UPSTASH_VECTOR_REST_URL",
+        "UPSTASH_VECTOR_REST_TOKEN",
+    ]:
+        if not os.getenv(v):
+            raise SystemExit(f"Missing {v} in backend/.env")
 
-    # Fail fast if Upstash env vars not configured
-    url = os.getenv("UPSTASH_VECTOR_REST_URL")
-    token = os.getenv("UPSTASH_VECTOR_REST_TOKEN")
-    if not url or not token:
-        raise SystemExit(
-            "Missing UPSTASH_VECTOR_REST_URL / UPSTASH_VECTOR_REST_TOKEN in backend/.env"
-        )
-
-    raw_docs: list[Document] = []
-    raw_docs.extend(load_text_docs(DATA_DIR))
-    raw_docs.extend(load_pdf_docs(DATA_DIR))
-
+    raw_docs = load_r2_docs()
     if not raw_docs:
-        raise SystemExit(f"No .md/.txt/.pdf files found in {DATA_DIR}")
+        raise SystemExit("No ingestible .md/.txt/.pdf objects found in R2 (check bucket/prefix).")
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=900, chunk_overlap=150)
     chunks = splitter.split_documents(raw_docs)
@@ -90,18 +124,15 @@ def main():
     else:
         raise SystemExit(f"Unsupported EMBEDDING_PROVIDER: {EMBEDDING_PROVIDER}")
 
-    # Upstash Vector store (serverless)
     vectordb = UpstashVectorStore(
         embedding=embeddings,
-        index_url=url,
-        index_token=token,
-        # Some versions of the integration support namespace; if yours does, you can set it.
+        index_url=os.environ["UPSTASH_VECTOR_REST_URL"],
+        index_token=os.environ["UPSTASH_VECTOR_REST_TOKEN"],
+        # If your version supports it, you can use namespace:
         namespace=COLLECTION,
     )
 
     ids = [_stable_chunk_id(d, i) for i, d in enumerate(chunks)]
-
-    # Upsert
     vectordb.add_documents(chunks, ids=ids)
 
     print(f"✅ Ingested {len(chunks)} chunks into Upstash Vector (logical collection={COLLECTION})")

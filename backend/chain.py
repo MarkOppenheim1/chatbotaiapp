@@ -11,7 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 from langchain_core.runnables import RunnableWithMessageHistory, RunnableLambda
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_community.vectorstores.upstash import UpstashVectorStore
-
+from r2_utils import presign_get_url
 
 from config import (
     LLM_PROVIDER,
@@ -64,11 +64,13 @@ vectordb = UpstashVectorStore(
     embedding=embeddings,
     index_url=UPSTASH_URL,
     index_token=UPSTASH_TOKEN,
-    # If your installed version supports it, you can optionally use a namespace:
-    namespace=COLLECTION,
+    namespace=COLLECTION,  # if supported by your installed version
 )
 
 retriever = vectordb.as_retriever(search_kwargs={"k": RETRIEVAL_K})
+
+R2_PRESIGN_EXPIRES_SECONDS = int(os.environ.get("R2_PRESIGN_EXPIRES_SECONDS", "604800"))
+
 
 
 # -------------------------------------------------
@@ -89,11 +91,26 @@ def fetch_docs(inputs: dict) -> dict:
         if len(snippet) > 220:
             snippet = snippet[:220] + "…"
 
+        src = meta.get("source")
+        if meta.get("r2_bucket") and meta.get("r2_key"):
+            try:
+                src = presign_get_url(
+                    bucket=meta["r2_bucket"],
+                    key=meta["r2_key"],
+                    expires_seconds=R2_PRESIGN_EXPIRES_SECONDS,
+                )
+            except Exception:
+                src = meta.get("source")
+
+        # where src is the presigned url, and meta["r2_key"] exists
+        label = meta.get("source", meta.get("r2_key"))  # nice label for UI
         sources.append({
-            "source": meta.get("source"),
+            "label": label,
+            "url": src,
             "page": meta.get("page") + 1 if isinstance(meta.get("page"), int) else None,
             "snippet": snippet,
         })
+
 
     return {
         "input": query,
@@ -218,13 +235,21 @@ def sources_only(inputs: dict) -> dict:
         if len(snippet) > 220:
             snippet = snippet[:220] + "…"
         src = meta.get("source")
-        if src:
+        if meta.get("r2_bucket") and meta.get("r2_key"):
             try:
-                src = str(Path(src).relative_to(Path(__file__).parent / "data"))
+                src = presign_get_url(
+                    bucket=meta["r2_bucket"],
+                    key=meta["r2_key"],
+                    expires_seconds=R2_PRESIGN_EXPIRES_SECONDS,
+                )
             except Exception:
-                pass
+                src = meta.get("source")
+
+        # where src is the presigned url, and meta["r2_key"] exists
+        label = meta.get("source", meta.get("r2_key"))  # nice label for UI
         sources.append({
-            "source": src,
+            "label": label,
+            "url": src,
             "page": meta.get("page") + 1 if isinstance(meta.get("page"), int) else None,
             "snippet": snippet,
         })
