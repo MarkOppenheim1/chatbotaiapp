@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import os
+import hashlib
 from pathlib import Path
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -8,10 +10,8 @@ from langchain_core.documents import Document
 
 from langchain_openai import OpenAIEmbeddings
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-# If you want Google embeddings instead, swap to:
-# from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-from langchain_chroma import Chroma
+from langchain_community.vectorstores.upstash import UpstashVectorStore
 from langchain_community.document_loaders import PyPDFLoader
 
 from config import (
@@ -20,8 +20,8 @@ from config import (
 )
 
 DATA_DIR = Path(__file__).parent / "data"
-CHROMA_DIR = Path(__file__).parent / "chroma_db"
-COLLECTION = "rag_docs"
+COLLECTION = "rag_docs"  # used as Upstash "namespace" conceptually; kept for consistency
+
 
 def load_text_docs(data_dir: Path) -> list[Document]:
     docs: list[Document] = []
@@ -37,22 +37,43 @@ def load_text_docs(data_dir: Path) -> list[Document]:
             )
     return docs
 
+
 def load_pdf_docs(data_dir: Path) -> list[Document]:
     docs: list[Document] = []
     for p in data_dir.rglob("*.pdf"):
         loader = PyPDFLoader(str(p))
         pdf_docs = loader.load()  # one Document per page, includes metadata like 'page'
-        # Ensure source path is present (PyPDFLoader usually sets 'source' already, but we normalize)
         for d in pdf_docs:
             d.metadata["source"] = str(p)
         docs.extend(pdf_docs)
     return docs
 
+
+def _stable_chunk_id(doc: Document, idx: int) -> str:
+    """
+    Deterministic ID so re-running ingest updates instead of duplicating.
+    Includes source + page (if any) + index + content hash.
+    """
+    src = str(doc.metadata.get("source", ""))
+    page = str(doc.metadata.get("page", ""))
+    content = doc.page_content or ""
+    digest = hashlib.sha1(content.encode("utf-8")).hexdigest()
+    return f"{src}|p={page}|i={idx}|h={digest}"
+
+
 def main():
     if not DATA_DIR.exists():
         raise SystemExit(f"Create {DATA_DIR} and add files first (md/txt/pdf).")
 
-    raw_docs = []
+    # Fail fast if Upstash env vars not configured
+    url = os.getenv("UPSTASH_VECTOR_REST_URL")
+    token = os.getenv("UPSTASH_VECTOR_REST_TOKEN")
+    if not url or not token:
+        raise SystemExit(
+            "Missing UPSTASH_VECTOR_REST_URL / UPSTASH_VECTOR_REST_TOKEN in backend/.env"
+        )
+
+    raw_docs: list[Document] = []
     raw_docs.extend(load_text_docs(DATA_DIR))
     raw_docs.extend(load_pdf_docs(DATA_DIR))
 
@@ -62,26 +83,29 @@ def main():
     splitter = RecursiveCharacterTextSplitter(chunk_size=900, chunk_overlap=150)
     chunks = splitter.split_documents(raw_docs)
 
-    if EMBEDDING_PROVIDER == 'openai':
+    if EMBEDDING_PROVIDER == "openai":
         embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
-    elif EMBEDDING_PROVIDER == 'google':
+    elif EMBEDDING_PROVIDER == "google":
         embeddings = GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL)
+    else:
+        raise SystemExit(f"Unsupported EMBEDDING_PROVIDER: {EMBEDDING_PROVIDER}")
 
-    # Rebuild the collection cleanly each run
-    vectordb = Chroma(
-        persist_directory=str(CHROMA_DIR),
-        collection_name=COLLECTION,
-        embedding_function=embeddings,
-    )
-    vectordb.delete_collection()  # wipe old embeddings
-    vectordb = Chroma.from_documents(
-        documents=chunks,
+    # Upstash Vector store (serverless)
+    vectordb = UpstashVectorStore(
         embedding=embeddings,
-        persist_directory=str(CHROMA_DIR),
-        collection_name=COLLECTION,
+        index_url=url,
+        index_token=token,
+        # Some versions of the integration support namespace; if yours does, you can set it.
+        namespace=COLLECTION,
     )
 
-    print(f"✅ Ingested {len(chunks)} chunks into {CHROMA_DIR} (collection={COLLECTION})")
+    ids = [_stable_chunk_id(d, i) for i, d in enumerate(chunks)]
+
+    # Upsert
+    vectordb.add_documents(chunks, ids=ids)
+
+    print(f"✅ Ingested {len(chunks)} chunks into Upstash Vector (logical collection={COLLECTION})")
+
 
 if __name__ == "__main__":
     main()

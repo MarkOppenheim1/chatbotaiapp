@@ -10,7 +10,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 
 from langchain_core.runnables import RunnableWithMessageHistory, RunnableLambda
 from langchain_community.chat_message_histories import RedisChatMessageHistory
-from langchain_chroma import Chroma
+from langchain_community.vectorstores.upstash import UpstashVectorStore
+
 
 from config import (
     LLM_PROVIDER,
@@ -45,21 +46,30 @@ elif LLM_PROVIDER == "openai":
 # -------------------------------------------------
 # Vector DB (must match ingest.py)
 # -------------------------------------------------
-CHROMA_DIR = Path(__file__).parent / "chroma_db"
 COLLECTION = "rag_docs"
 
 if EMBEDDING_PROVIDER == "openai":
     embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 elif EMBEDDING_PROVIDER == "google":
     embeddings = GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL)
+else:
+    raise SystemExit(f"Unsupported EMBEDDING_PROVIDER: {EMBEDDING_PROVIDER}")
 
-vectordb = Chroma(
-    persist_directory=str(CHROMA_DIR),
-    collection_name=COLLECTION,
-    embedding_function=embeddings,
+UPSTASH_URL = os.getenv("UPSTASH_VECTOR_REST_URL")
+UPSTASH_TOKEN = os.getenv("UPSTASH_VECTOR_REST_TOKEN")
+if not UPSTASH_URL or not UPSTASH_TOKEN:
+    raise SystemExit("Missing UPSTASH_VECTOR_REST_URL / UPSTASH_VECTOR_REST_TOKEN in backend/.env")
+
+vectordb = UpstashVectorStore(
+    embedding=embeddings,
+    index_url=UPSTASH_URL,
+    index_token=UPSTASH_TOKEN,
+    # If your installed version supports it, you can optionally use a namespace:
+    namespace=COLLECTION,
 )
 
 retriever = vectordb.as_retriever(search_kwargs={"k": RETRIEVAL_K})
+
 
 # -------------------------------------------------
 # Helpers

@@ -12,3 +12,4 @@ chromadb
 langchain-chroma
 pypdf
 pyyaml
+upstash-vector
